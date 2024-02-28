@@ -13,7 +13,7 @@ func configurePaCommand(app commandHost) {
 	//addCheat(, cmd *fisk.CmdClause)
 
 	// subcommands
-	configurePaHealthcheckCommand(srv)
+	configurePaConnCheckCommand(srv)
 }
 
 func init() {
@@ -21,19 +21,16 @@ func init() {
 	registerCommand("pa", 21, configurePaCommand)
 }
 
-// TODO: move to it's own file when done POC
-// -----------------------------------------
-
-type PaHealthcheckCmd struct {
+type PaConnCheckCmd struct {
 }
 
-func configurePaHealthcheckCommand(srv *fisk.CmdClause) {
-	c := &PaHealthcheckCmd{}
+func configurePaConnCheckCommand(srv *fisk.CmdClause) {
+	c := &PaConnCheckCmd{}
 
-	srv.Command("healthcheck", "show health of servers").Action(c.healthcheck)
+	srv.Command("check", "show connection health").Action(c.connectionCheck)
 }
 
-func (c *PaHealthcheckCmd) healthcheck(_ *fisk.ParseContext) error {
+func (c *PaConnCheckCmd) connectionCheck(_ *fisk.ParseContext) error {
 	nc, err := newNatsConn("", natsOpts()...)
 	if err != nil {
 		return err
