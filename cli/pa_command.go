@@ -40,6 +40,7 @@ var endpoints = []string{
 	"SUBSZ",
 	"JSZ",
 	"ACCOUNTZ",
+	"HEALTHZ",
 }
 
 var accountEndpoints = []string{
@@ -59,6 +60,12 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 	}
 	defer nc.Close()
 
+	// js context
+	//js, err := nc.JetStream(jsOpts()...)
+	//if err != nil {
+	//return err
+	//}
+	
 	// archive writer
 	archivePath := filepath.Join(os.TempDir(), "archive.zip")
 	fmt.Printf("archivePath: %v\n", archivePath)
@@ -85,6 +92,7 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 	for _, serverInfo := range servers {
 		for _, endpoint := range endpoints {
 			subject := fmt.Sprintf("$SYS.REQ.SERVER.%s.%s", serverInfo.ID, endpoint)
+			// TODO: pull this out of callback
 			err = doReqAsync(nil, subject, 1, nc, func(b []byte) {
 				var apiResponse server.ServerAPIResponse
 				if err = json.Unmarshal(b, &apiResponse); err != nil {
@@ -101,6 +109,7 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 
 	// get accounts
 	var accountIds []string
+	// TODO: pull this out of callback
 	err = doReqAsync(nil, "$SYS.REQ.SERVER.PING.ACCOUNTZ", 1, nc, func(b []byte) {
 		var apiResponse server.ServerAPIResponse
 		if err = json.Unmarshal(b, &apiResponse); err != nil {
@@ -124,6 +133,7 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 	for _, accountId := range accountIds {
 		for _, endpoint := range accountEndpoints {
 			subject := fmt.Sprintf("$SYS.REQ.ACCOUNT.%s.%s", accountId, endpoint)
+			// TODO: pull this out of callback
 			err = doReqAsync(nil, subject, 1, nc, func(b []byte) {
 				var apiResponse server.ServerAPIResponse
 				if err = json.Unmarshal(b, &apiResponse); err != nil {
@@ -138,5 +148,54 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 		}
 	}
 
+	/*
+		// --- per-asset info and state --- //
+		// streams
+		streams, streamNames, err := mgr.Streams(nil)
+		if err != nil {
+			return err
+		}
+		for _, stream := range streams {
+			streamInfo, err := stream.Information()
+			if err != nil {
+				return err
+			}
+			streamInfoBytes, err := serialize(streamInfo)
+			if err != nil {
+				return err
+			}
+			archivePath := fmt.Sprintf("stream_%s_info.json", streamInfo.Config.Name)
+			if err = aw.AddArtifact(archivePath, streamInfoBytes); err != nil {
+				return err
+			}
+		}
+
+		// consumers
+		for _, streamName := range streamNames {
+			consumers, _, err := mgr.Consumers(streamName)
+			if err != nil {
+				return err
+			}
+			for _, consumer := range consumers {
+				consumerState, err := consumer.State()
+				if err != nil {
+					return err
+				}
+				consumerStateBytes, err := serialize(consumerState)
+				if err != nil {
+					return err
+				}
+				archivePath := fmt.Sprintf("consumer_%s_state.json", consumerState.Name)
+				if err = aw.AddArtifact(archivePath, consumerStateBytes); err != nil {
+					return err
+				}
+			}
+		}
+	*/
+
 	return nil
+}
+
+func serialize(v interface{}) ([]byte, error) {
+	return json.Marshal(v)
 }
