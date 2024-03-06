@@ -10,6 +10,7 @@ import (
 	"github.com/choria-io/fisk"
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/natscli/archive"
+	nsys "github.com/piotrpio/nats-sys-client/pkg/sys"
 )
 
 func configurePaCommand(app commandHost) {
@@ -65,7 +66,7 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 	//if err != nil {
 	//return err
 	//}
-	
+
 	// archive writer
 	archivePath := filepath.Join(os.TempDir(), "archive.zip")
 	fmt.Printf("archivePath: %v\n", archivePath)
@@ -145,6 +146,35 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 					panic(err)
 				}
 			})
+		}
+	}
+
+	sys, err := nsys.NewSysClient(nc)
+	if err != nil {
+		return err
+	}
+
+	for _, accountId := range accountIds {
+		jszResponses, err := sys.JszPing(
+			nsys.JszEventOptions{
+				JszOptions: nsys.JszOptions{
+					Account: accountId,
+					Streams: true,
+				},
+			},
+		)
+		if err != nil {
+			return err
+		}
+		for _, jszResp := range jszResponses {
+			for _, ad := range jszResp.JSInfo.AccountDetails {
+				for _, sd := range ad.Streams {
+					// TODO: serialize
+					// TODO: tokenize
+// gather method 
+					fmt.Printf("accountId: %s, streamDetail: %+v\n", accountId, sd)
+				}
+			}
 		}
 	}
 
