@@ -103,14 +103,15 @@ var accountEndpoints = []Endpoint{
 		archive.TagSubs(),
 	},
 	{
-		"JSZ",
-		server.AccountDetail{},
-		archive.TagJetStream(),
-	},
-	{
 		"INFO",
 		server.AccountInfo{},
+		// TODO: find a better tag
 		archive.TagAccounts(),
+	},
+	{
+		"JSZ",
+		server.JetStreamStats{},
+		archive.TagJetStream(),
 	},
 }
 
@@ -221,19 +222,38 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 			if err = json.Unmarshal(apiResponseBytes, &apiResponse); err != nil {
 				return err
 			}
+			// handle api response error
+			if apiResponse.Error != nil {
+				fmt.Printf("%s cannot be collected for account %s, error: %s\n", endpoint.name, accountId, apiResponse.Error)
+				continue
+			}
 
+			var apiResponseDataBytes []byte
+			apiResponseDataBytes, err = json.Marshal(apiResponse.Data)
 			if err != nil {
+				return err
+			}
+
+			resp := reflect.New(reflect.TypeOf(endpoint.expectedStruct)).Interface()
+			if err = json.Unmarshal(apiResponseDataBytes, resp); err != nil {
+				fmt.Printf("failed to unmarshal %s api response from account %s: %s\n", endpoint.name, accountId, err.Error())
+				continue
+			}
+			
+			// add to archive
+			if err = aw.Add(resp, archive.TagAccount(accountId), endpoint.typeTag); err != nil {
 				return err
 			}
 		}
 	}
 
+	// TODO: remove this dependency
 	sys, err := nsys.NewSysClient(nc)
 	if err != nil {
 		return err
 	}
 
-	// TODO: do again without nats-sys-client
+	// HACK: refactor to use wire protocol
 	for _, accountId := range accountIds {
 		jszResponses, err := sys.JszPing(
 			nsys.JszEventOptions{
@@ -249,10 +269,9 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 		for _, jszResp := range jszResponses {
 			for _, ad := range jszResp.JSInfo.AccountDetails {
 				for _, sd := range ad.Streams {
-					// TODO: serialize
-					// TODO: tag
-					// gather method
-					fmt.Printf("accountId: %s, streamDetail: %+v\n", accountId, sd)
+					if err = aw.Add(sd, archive.TagAccount(accountId), archive.TagStream(sd.Name)); err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -261,6 +280,3 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 	return nil
 }
 
-func serialize(v interface{}) ([]byte, error) {
-	return json.Marshal(v)
-}
