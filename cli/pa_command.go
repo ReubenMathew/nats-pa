@@ -115,6 +115,12 @@ var accountEndpoints = []Endpoint{
 	},
 }
 
+type ServerAPIResponse struct {
+	Server *server.ServerInfo `json:"server"`
+	Data   json.RawMessage    `json:"data,omitempty"`
+	Error  *server.ApiError   `json:"error,omitempty"`
+}
+
 func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 
 	// nats connection
@@ -136,7 +142,7 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 	// discover servers
 	servers := []*server.ServerInfo{}
 	if err = doReqAsync(nil, "$SYS.REQ.SERVER.PING", 0, nc, func(b []byte) {
-		var apiResponse server.ServerAPIResponse
+		var apiResponse ServerAPIResponse
 		if err = json.Unmarshal(b, &apiResponse); err != nil {
 			panic(err)
 		}
@@ -156,7 +162,7 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 				apiResponseBytes = b
 			})
 
-			var apiResponse server.ServerAPIResponse
+			var apiResponse ServerAPIResponse
 			if err = json.Unmarshal(apiResponseBytes, &apiResponse); err != nil {
 				return err
 			}
@@ -188,7 +194,7 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 			return err
 		}
 
-		var apiResponse server.ServerAPIResponse
+		var apiResponse ServerAPIResponse
 		if err = json.Unmarshal(apiResponseBytes, &apiResponse); err != nil {
 			panic(err)
 		}
@@ -218,7 +224,7 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 				return err
 			}
 
-			var apiResponse server.ServerAPIResponse
+			var apiResponse ServerAPIResponse
 			if err = json.Unmarshal(apiResponseBytes, &apiResponse); err != nil {
 				return err
 			}
@@ -239,7 +245,7 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 				fmt.Printf("failed to unmarshal %s api response from account %s: %s\n", endpoint.name, accountId, err.Error())
 				continue
 			}
-			
+
 			// add to archive
 			if err = aw.Add(resp, archive.TagAccount(accountId), endpoint.typeTag); err != nil {
 				return err
@@ -279,4 +285,3 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 
 	return nil
 }
-
