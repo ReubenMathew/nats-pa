@@ -100,30 +100,34 @@ func checkClusterMemoryUsage(r *archive.Reader) error {
 		clusterMemoryUsage[serverTag.Value] = float64(serverVarz.Mem)
 	}
 
-	medianMem := median(clusterMemoryUsage)
-	medianMemMb := medianMem / 1024 / 1024
+	average := func(m map[string]float64) float64 {
 
+		var (
+			median float64
+			count  int
+		)
+
+		for _, v := range m {
+			median += v
+			count++
+		}
+
+		return median / float64(count)
+	}
+
+	medianMem := average(clusterMemoryUsage)
+	medianMemMb := medianMem / 1024 / 1024
+	allGood := true
 	for server, mem := range clusterMemoryUsage {
 		if math.Abs(mem-medianMem)/medianMem > clusterMemoryUsageThresholdPercentage {
+			allGood = false
 			memMb := mem / 1024 / 1024
 			fmt.Printf("🔔 WARNING: %v memory usage (%.2fMb) difference from median (%.2fMb) is over %.2f%% threshold\n", server, memMb, medianMemMb, clusterMemoryUsageThresholdPercentage)
 		}
 	}
-	fmt.Println("✅ Cluster memory usage for all servers is within threshold")
-
-	return nil
-}
-
-func median(m map[string]float64) float64 {
-	var (
-		median float64
-		count  int
-	)
-
-	for _, v := range m {
-		median += v
-		count++
+	if allGood {
+		fmt.Println("✅ Cluster memory usage for all servers is within threshold")
 	}
 
-	return median / float64(count)
+	return nil
 }
