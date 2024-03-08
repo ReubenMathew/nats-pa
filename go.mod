@@ -1,4 +1,4 @@
-module github.com/nats-io/natscli
+module github.com/ReubenMathew/nats-pa
 
 go 1.21
 
