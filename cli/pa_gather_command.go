@@ -15,6 +15,8 @@ import (
 
 type PaGatherCmd struct {
 	archiveFilePath string
+	noConsumerInfo  bool
+	noStreamInfo    bool
 }
 
 type Endpoint struct {
@@ -23,7 +25,8 @@ type Endpoint struct {
 	typeTag        *archive.Tag
 }
 
-// We can't use server.ServerAPIResponse since it will unmarshal Data into a map
+// We can't use server.ServerAPIResponse since it will unmarshal Data into a map, causing
+// a loss of precision for large numbers when remarshalling and unmarshalling again
 type CustomServerAPIResponse struct {
 	Server *server.ServerInfo `json:"server"`
 	Data   json.RawMessage    `json:"data,omitempty"`
@@ -111,7 +114,9 @@ func configurePaGatherCommand(srv *fisk.CmdClause) {
 	c := &PaGatherCmd{}
 
 	gather := srv.Command("gather", "create archive of monitoring data for all servers and accounts").Action(c.gather)
-	gather.Flag("output", "output file path of generated archive").StringVar(&c.archiveFilePath)
+	gather.Flag("output", "output file path of generated archive").Short('o').StringVar(&c.archiveFilePath)
+	gather.Flag("no-consumers", "do not include consumer data").UnNegatableBoolVar(&c.noConsumerInfo)
+	gather.Flag("no-stream", "do not include stream info data").UnNegatableBoolVar(&c.noStreamInfo)
 }
 
 func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
@@ -249,31 +254,33 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 		}
 	}
 
-	// TODO: remove this dependency
-	sys, err := nsys.NewSysClient(nc)
-	if err != nil {
-		return err
-	}
-
-	// HACK: refactor to use wire protocol
-	for _, accountId := range accountIds {
-		jszResponses, err := sys.JszPing(
-			nsys.JszEventOptions{
-				JszOptions: nsys.JszOptions{
-					Account: accountId,
-					Streams: true,
-					// TODO: Consumer: false|true, based on cli arg
-				},
-			},
-		)
+	if !c.noStreamInfo {
+		// TODO: remove this dependency
+		sys, err := nsys.NewSysClient(nc)
 		if err != nil {
 			return err
 		}
-		for _, jszResp := range jszResponses {
-			for _, ad := range jszResp.JSInfo.AccountDetails {
-				for _, sd := range ad.Streams {
-					if err = aw.Add(sd, archive.TagAccount(accountId), archive.TagServer(jszResp.Server.Name), archive.TagStream(sd.Name)); err != nil {
-						return err
+
+		// HACK: refactor to use wire protocol
+		for _, accountId := range accountIds {
+			jszResponses, err := sys.JszPing(
+				nsys.JszEventOptions{
+					JszOptions: nsys.JszOptions{
+						Account:  accountId,
+						Streams:  true,
+						Consumer: !c.noConsumerInfo,
+					},
+				},
+			)
+			if err != nil {
+				return err
+			}
+			for _, jszResp := range jszResponses {
+				for _, ad := range jszResp.JSInfo.AccountDetails {
+					for _, sd := range ad.Streams {
+						if err = aw.Add(sd, archive.TagAccount(accountId), archive.TagServer(jszResp.Server.Name), archive.TagStream(sd.Name)); err != nil {
+							return err
+						}
 					}
 				}
 			}
