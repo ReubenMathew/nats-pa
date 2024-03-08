@@ -14,6 +14,7 @@ import (
 )
 
 type PaGatherCmd struct {
+	archiveFilePath string
 }
 
 type Endpoint struct {
@@ -108,7 +109,8 @@ var accountEndpoints = []Endpoint{
 func configurePaGatherCommand(srv *fisk.CmdClause) {
 	c := &PaGatherCmd{}
 
-	srv.Command("gather", "create archive of monitoring data for all servers and accounts").Action(c.gather)
+	gather := srv.Command("gather", "create archive of monitoring data for all servers and accounts").Action(c.gather)
+	gather.Flag("output", "output file path of generated archive").StringVar(&c.archiveFilePath)
 }
 
 func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
@@ -120,10 +122,13 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 	}
 	defer nc.Close()
 
+	// create temp file if not provided
+	if c.archiveFilePath == "" {
+		c.archiveFilePath = filepath.Join(os.TempDir(), "archive.zip")
+	}
+
 	// archive writer
-	archivePath := filepath.Join(os.TempDir(), "archive.zip")
-	fmt.Printf("archivePath: %v\n", archivePath)
-	aw, err := archive.NewWriter(archivePath)
+	aw, err := archive.NewWriter(c.archiveFilePath)
 	if err != nil {
 		return err
 	}
@@ -256,6 +261,7 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 				JszOptions: nsys.JszOptions{
 					Account: accountId,
 					Streams: true,
+					// TODO: Consumer: false|true, based on cli arg
 				},
 			},
 		)
@@ -265,7 +271,7 @@ func (c *PaGatherCmd) gather(_ *fisk.ParseContext) error {
 		for _, jszResp := range jszResponses {
 			for _, ad := range jszResp.JSInfo.AccountDetails {
 				for _, sd := range ad.Streams {
-					if err = aw.Add(sd, archive.TagAccount(accountId), archive.TagStream(sd.Name)); err != nil {
+					if err = aw.Add(sd, archive.TagAccount(accountId), archive.TagServer(jszResp.Server.Name), archive.TagStream(sd.Name)); err != nil {
 						return err
 					}
 				}
