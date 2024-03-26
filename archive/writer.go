@@ -64,6 +64,41 @@ func (w *Writer) AddArtifact(name string, content *bytes.Reader) error {
 	return nil
 }
 
+func (w *Writer) AddFile(bytes []byte, tags ...*Tag) error {
+	if w.zipWriter == nil {
+		return fmt.Errorf("attempting to write into a closed writer")
+	}
+
+	// Create filename based on tags
+	name, err := createFilenameFromTags(tags)
+	if err != nil {
+		return fmt.Errorf("failed to create artifact name: %w", err)
+	}
+
+	// Ensure file is unique
+	_, exists := w.manifestMap[name]
+	if exists {
+		return fmt.Errorf("artifact %s with identical tags is already present", name)
+	}
+
+	// Open a zip writer
+	f, err := w.zipWriter.Create(name)
+	if err != nil {
+		return fmt.Errorf("failed to create file in archive: %w", err)
+	}
+
+	// Encode bytes as a file
+	_, err = f.Write(bytes)
+	if err != nil {
+		return fmt.Errorf("failed to write bytes: %w", err)
+	}
+
+	// Add file and its tags to the manifest
+	w.manifestMap[name] = tags
+
+	return nil
+}
+
 // Add serializes the given artifact and adds it to the archive, it creates a file name based on the provided tags
 // and ensures uniqueness. The artifact is also added to the manifest for indexing, enabling tag-based querying
 // in the reader

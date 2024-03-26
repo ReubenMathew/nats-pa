@@ -16,6 +16,7 @@ const (
 	clusterTagLabel TagLabel = "cluster"
 	accountTagLabel TagLabel = "account"
 	streamTagLabel  TagLabel = "stream"
+	profileTagLabel TagLabel = "profile"
 	typeTagLabel    TagLabel = "artifact_type"
 )
 
@@ -53,6 +54,7 @@ var dimensionTagsNames = map[TagLabel]interface{}{
 	clusterTagLabel: nil,
 	serverTagLabel:  nil,
 	streamTagLabel:  nil,
+	profileTagLabel: nil,
 	typeTagLabel:    nil,
 }
 
@@ -107,11 +109,15 @@ func createFilenameFromTags(tags []*Tag) (string, error) {
 	clusterTag, hasClusterTag := dimensionTagsMap[clusterTagLabel], dimensionTagsMap[clusterTagLabel] != nil
 	serverTag, hasServerTag := dimensionTagsMap[serverTagLabel], dimensionTagsMap[serverTagLabel] != nil
 	streamTag, hasStreamTag := dimensionTagsMap[streamTagLabel], dimensionTagsMap[streamTagLabel] != nil
+	profileTag, hasProfileTag := dimensionTagsMap[profileTagLabel], dimensionTagsMap[profileTagLabel] != nil
 	typeTag, hasTypeTag := dimensionTagsMap[typeTagLabel], dimensionTagsMap[typeTagLabel] != nil
 
-	var name string
+	var (
+		name           string
+		fileTypeSuffix = ".json"
+	)
 
-	if !hasTypeTag {
+	if !hasTypeTag && !hasProfileTag {
 		return "", fmt.Errorf("missing required tag for artifact type")
 	} else if !hasServerTag {
 		return "", fmt.Errorf("missing required tag for source server")
@@ -122,6 +128,12 @@ func createFilenameFromTags(tags []*Tag) (string, error) {
 		}
 
 		name = fmt.Sprintf("accounts/%s/streams/%s/server_%s__%s", accountTag.Value, streamTag.Value, serverTag.Value, typeTag.Value)
+
+	} else if hasProfileTag {
+		// Profile artifact for a server in a cluster
+		name = fmt.Sprintf("clusters/%s/%s/server_%s__profile_%s", clusterTag.Value, serverTag.Value, serverTag.Value, profileTag.Value)
+		// Profile artifacts are always .out files
+		fileTypeSuffix = ".prof"
 
 	} else if hasAccountTag {
 		// Account artifact (but not a stream)
@@ -134,7 +146,7 @@ func createFilenameFromTags(tags []*Tag) (string, error) {
 		if hasClusterTag {
 			clusterName = clusterTag.Value
 		}
-		name = fmt.Sprintf("clusters/%s/server_%s__%s", clusterName, serverTag.Value, typeTag.Value)
+		name = fmt.Sprintf("clusters/%s/%s/server_%s__%s", clusterName, serverTag.Value, serverTag.Value, typeTag.Value)
 
 	} else {
 		// TODO may add more cases later, for now bomb if none of the above applies
@@ -142,7 +154,7 @@ func createFilenameFromTags(tags []*Tag) (string, error) {
 	}
 
 	//TODO could set suffix based on type. For now, everything JSON.
-	name = rootPrefix + name + ".json"
+	name = rootPrefix + name + fileTypeSuffix
 
 	return name, nil
 }
@@ -228,5 +240,12 @@ func TagStream(streamName string) *Tag {
 	return &Tag{
 		Name:  streamTagLabel,
 		Value: streamName,
+	}
+}
+
+func TagProfile(profileName string) *Tag {
+	return &Tag{
+		Name:  profileTagLabel,
+		Value: profileName,
 	}
 }
